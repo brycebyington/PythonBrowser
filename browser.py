@@ -1,8 +1,39 @@
 import socket
 import ssl
+import tkinter
+
+# to-dos:
+# - http compression
+# - caching
+# - keep-alive
+
+WIDTH, HEIGHT = 800, 600
+
+class Browser:
+    def __init__(self):
+        # create the window
+        self.window = tkinter.Tk()
+        # create the canvas inside the window
+        # window is passed as an argument to inform
+        # tk of where to display the canvas
+        self.canvas = tkinter.Canvas(
+            self.window,
+            width=WIDTH,
+            height=HEIGHT
+        )
+        # position the canvas inside the window
+        self.canvas.pack()
+    def load(self, url):
+        self.canvas.create_rectangle(10, 20, 400, 300)
+        self.canvas.create_oval(100, 100, 150, 150)
+        self.canvas.create_text(200, 150, text="Hi!")
+        body = url.request()
+        text = lex(body, url.view_source)
+        for c in text:
+            self.canvas.create_text(100, 100, text=c)
 
 class URL:
-    def __init__(self, url): 
+    def __init__(self, url):
         # __init__ is Python's syntax for class constructors
         # "self" is Python's analog for "this" in C++, which
         # is required to be the first parameter of any method
@@ -14,6 +45,7 @@ class URL:
             self.scheme = "data"
             self.data = url.removeprefix("data:text/html,")
         else: 
+            self.view_source = False
             if url.startswith("view-source:"):
                 self.scheme = "view-source"
                 self.view_source = True
@@ -103,14 +135,14 @@ class URL:
         # make sure data is not sent unusually
         
         # if 300 level status, redirect
-        if (status.startswith("3")):
-            load(URL(response_headers["location"]))
+        if status.startswith("3"):
+            Browser().load(URL(response_headers["location"]))
         
         content = response.read()
         s.close()
         return content
 
-def show(body, view_source):
+def lex(body, view_source):
         in_tag = False
         body_result = ""
         # iterate through request body, character by character
@@ -131,16 +163,16 @@ def show(body, view_source):
             # special characters (< and > literals)
             body_result = body_result.replace("&lt;", "<")
             body_result = body_result.replace("&gt;", ">")
-            print(body_result)
+            return body_result
+            
+        # if view_source is True print source code
         else:
-            print(body)
-                
-def load(url):
-    body = url.request()
-    show(body, url.view_source)
+            return body_result
 
 if __name__ == "__main__":
     import sys
-    load(URL(sys.argv[1]))
-        
+    Browser().load(URL(sys.argv[1]))
+    # tk mainloop asks the desktop environment for recent inputs,
+    # calls application to update state, then redraws the window
+    tkinter.mainloop()
         
