@@ -24,13 +24,23 @@ class Browser:
         # position the canvas inside the window
         self.canvas.pack()
     def load(self, url):
-        self.canvas.create_rectangle(10, 20, 400, 300)
-        self.canvas.create_oval(100, 100, 150, 150)
-        self.canvas.create_text(200, 150, text="Hi!")
+        # self.canvas.create_rectangle(10, 20, 400, 300)
+        # self.canvas.create_oval(100, 100, 150, 150)
+        # self.canvas.create_text(200, 150, text="Hi!")
         body = url.request()
         text = lex(body, url.view_source)
+        
+        HSTEP, VSTEP = 13, 18
+        cursor_x, cursor_y = HSTEP, VSTEP
+        # point to where next char will go, avoids text blob
+        # will eventually be font metrics
         for c in text:
-            self.canvas.create_text(100, 100, text=c)
+            self.canvas.create_text(cursor_x, cursor_y, text=c)
+            cursor_x += HSTEP
+            if cursor_x >= WIDTH - HSTEP:
+                # wrap text once at edge of screen
+                cursor_y += VSTEP
+                cursor_x = HSTEP
 
 class URL:
     def __init__(self, url):
