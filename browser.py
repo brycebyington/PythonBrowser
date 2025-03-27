@@ -8,6 +8,10 @@ import tkinter
 # - keep-alive
 
 WIDTH, HEIGHT = 800, 600
+HSTEP, VSTEP = 13, 18
+# HSTEP: space between characters, VSTEP: space between lines
+SCROLL_STEP = 100
+# how much to scroll
 
 class Browser:
     def __init__(self):
@@ -23,25 +27,33 @@ class Browser:
         )
         # position the canvas inside the window
         self.canvas.pack()
+        # distance scrolled
+        self.scroll = 0
+        # bind scroll function to down key
+        # self.scrolldown is an event handler
+        self.window.bind("<Down>", self.scrolldown)
+    
+    def scrolldown(self, e):
+        # e is an event argument, which is ignored here because
+        # key presses only require information about
+        # whether or not the key is pressed
+        self.scroll += SCROLL_STEP
+        self.draw()
+
+    def draw(self):
+        # erase old text before drawing new text when scrolling down
+        self.canvas.delete("all")
+        # loop through the display list and draw each character
+        # draw is included in Browser since it needs access to the canvas
+        for x, y, c in self.display_list:
+            # when self.scroll changes value, the page scrolls
+            self.canvas.create_text(x, y - self.scroll, text=c)
+
     def load(self, url):
-        # self.canvas.create_rectangle(10, 20, 400, 300)
-        # self.canvas.create_oval(100, 100, 150, 150)
-        # self.canvas.create_text(200, 150, text="Hi!")
         body = url.request()
         text = lex(body, url.view_source)
-        
-        HSTEP, VSTEP = 13, 18
-        cursor_x, cursor_y = HSTEP, VSTEP
-        # point to where next char will go, avoids text blob
-        # will eventually be font metrics
-        for c in text:
-            self.canvas.create_text(cursor_x, cursor_y, text=c)
-            cursor_x += HSTEP
-            if cursor_x >= WIDTH - HSTEP:
-                # wrap text once at edge of screen
-                cursor_y += VSTEP
-                cursor_x = HSTEP
-
+        self.display_list = layout(text)
+        self.draw()
 class URL:
     def __init__(self, url):
         # __init__ is Python's syntax for class constructors
@@ -178,6 +190,23 @@ def lex(body, view_source):
         # if view_source is True print source code
         else:
             return body_result
+
+def layout(text):
+    # instead of calling create_text on each char,
+    # add to list with its position
+        display_list = []
+        cursor_x, cursor_y = HSTEP, VSTEP
+        for c in text:
+            display_list.append((cursor_x, cursor_y, c))
+            cursor_x += HSTEP
+            # shift right after each character
+            if cursor_x >= WIDTH - HSTEP:
+                # if x position is >= the screen width minus a step,
+                # reset x position and increment y position to
+                # go to a new line
+                cursor_y += VSTEP
+                cursor_x = HSTEP
+        return display_list
 
 if __name__ == "__main__":
     import sys
