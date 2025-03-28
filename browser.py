@@ -32,6 +32,8 @@ class Browser:
         # bind scroll function to down key
         # self.scrolldown is an event handler
         self.window.bind("<Down>", self.scrolldown)
+        self.window.bind("<Up>", self.scrollup)
+        self.window.bind("<MouseWheel>", self.mousescroll)
     
     def scrolldown(self, e):
         # e is an event argument, which is ignored here because
@@ -39,6 +41,17 @@ class Browser:
         # whether or not the key is pressed
         self.scroll += SCROLL_STEP
         self.draw()
+    
+    def scrollup(self, e):
+        # negative number to scroll up because vertical coordinates are backwards
+        self.scroll -= SCROLL_STEP
+        self.draw()
+    
+    def mousescroll(self, e):
+        # e.delta: how far and in what direction to scroll
+        self.scroll -= e.delta
+        self.draw()
+    
 
     def draw(self):
         # erase old text before drawing new text when scrolling down
