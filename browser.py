@@ -46,6 +46,11 @@ class Browser:
         # loop through the display list and draw each character
         # draw is included in Browser since it needs access to the canvas
         for x, y, c in self.display_list:
+            # skip drawing characters that are off screen (continue)
+            if y > self.scroll + HEIGHT: continue
+            # skip characters below viewport
+            if y + VSTEP < self.scroll: continue
+            # y + VSTEP: bottom edge of the character
             # when self.scroll changes value, the page scrolls
             self.canvas.create_text(x, y - self.scroll, text=c)
 
