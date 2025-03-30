@@ -7,6 +7,7 @@ import tkinter
 # - caching
 # - keep-alive
 # - OpenMoji support
+
 WIDTH, HEIGHT = 800, 600
 HSTEP, VSTEP = 13, 18
 # HSTEP: space between characters, VSTEP: space between lines
@@ -90,9 +91,19 @@ class Browser:
         self.draw()
 class URL:
     def __init__(self, url):
+        # default view_source to false
+        self.view_source = False
+
         # __init__ is Python's syntax for class constructors
         # "self" is Python's analog for "this" in C++, which
         # is required to be the first parameter of any method
+        
+        if url == "about:blank":
+            # render blank page
+            self.scheme = "about"
+            self.host = "blank"
+            self.data = ""
+            return
         
         # check the scheme
         # only handling data:text/html for now
@@ -101,7 +112,7 @@ class URL:
             self.scheme = "data"
             self.data = url.removeprefix("data:text/html,")
         else: 
-            self.view_source = False
+
             if url.startswith("view-source:"):
                 self.scheme = "view-source"
                 self.view_source = True
@@ -135,6 +146,9 @@ class URL:
 
         if self.scheme == "data":
             return "<html><head></head><body>{}</body></html>".format(self.data)
+        
+        if self.scheme == "about" and self.host == "blank":
+            return "<html><head></head><body></body></html>"
             
         # create a socket
         s = socket.socket(
