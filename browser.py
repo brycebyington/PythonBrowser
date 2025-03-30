@@ -6,11 +6,13 @@ import tkinter
 # - http compression
 # - caching
 # - keep-alive
+# - OpenMoji support
 
 WIDTH, HEIGHT = 800, 600
 HSTEP, VSTEP = 13, 18
 # HSTEP: space between characters, VSTEP: space between lines
 SCROLL_STEP = 100
+LINEBREAK = VSTEP * 3
 # how much to scroll
 
 class Browser:
@@ -26,7 +28,9 @@ class Browser:
             height=HEIGHT
         )
         # position the canvas inside the window
-        self.canvas.pack()
+        # fill="both": fill entire space with widget
+        # expand=1: expand to fill any space not otherwise used
+        self.canvas.bind(fill="both", expand=1)
         # distance scrolled
         self.scroll = 0
         # bind scroll function to down key
@@ -222,7 +226,11 @@ def layout(text):
                 # if x position is >= the screen width minus a step,
                 # reset x position and increment y position to
                 # go to a new line
-                cursor_y += VSTEP
+                if (c == "\n"):
+                    #
+                    cursor_y += LINEBREAK
+                else:    
+                    cursor_y += VSTEP
                 cursor_x = HSTEP
         return display_list
 
