@@ -7,6 +7,9 @@ import tkinter
 # - caching
 # - keep-alive
 # - OpenMoji support
+# - scrollbar
+# - alternate text direction
+# - macOS touchpad scrolling
 
 WIDTH, HEIGHT = 800, 600
 HSTEP, VSTEP = 13, 18
@@ -81,6 +84,13 @@ class Browser:
             # skip characters below viewport
             if y + VSTEP < self.scroll: continue
             # y + VSTEP: bottom edge of the character
+
+            # if x, y are the last elements in the display_list, prevent further scrolling
+            # check if current cursor position is equal to the last element in display_list
+            # if it is, set self.scroll to the y value of the last element in display_list - height
+            if (x, y) == (self.display_list[-1][0], self.display_list[-1][1]):
+                self.scroll = self.display_list[-1][1] - self.height
+                
             # when self.scroll changes value, the page scrolls
             self.canvas.create_text(x, y - self.scroll, text=c)
 
