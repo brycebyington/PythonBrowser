@@ -7,7 +7,6 @@ import tkinter
 # - caching
 # - keep-alive
 # - OpenMoji support
-
 WIDTH, HEIGHT = 800, 600
 HSTEP, VSTEP = 13, 18
 # HSTEP: space between characters, VSTEP: space between lines
@@ -19,6 +18,8 @@ class Browser:
     def __init__(self):
         # create the window
         self.window = tkinter.Tk()
+        self.width = WIDTH
+        self.height = HEIGHT
         # create the canvas inside the window
         # window is passed as an argument to inform
         # tk of where to display the canvas
@@ -30,7 +31,8 @@ class Browser:
         # position the canvas inside the window
         # fill="both": fill entire space with widget
         # expand=1: expand to fill any space not otherwise used
-        self.canvas.bind(fill="both", expand=1)
+        self.canvas.pack(fill="both", expand=1)
+        self.canvas.bind("<Configure>", self.resize)
         # distance scrolled
         self.scroll = 0
         # bind scroll function to down key
@@ -38,6 +40,16 @@ class Browser:
         self.window.bind("<Down>", self.scrolldown)
         self.window.bind("<Up>", self.scrollup)
         self.window.bind("<MouseWheel>", self.mousescroll)
+    
+    def resize(self, e):
+        # event contains window information
+        # and updates when the window is resized
+        self.width = e.width
+        self.height = e.height
+        # have to update the display list before re-drawing
+        self.display_list = layout(self.text, width=self.width)
+        self.draw()
+        
     
     def scrolldown(self, e):
         # e is an event argument, which is ignored here because
@@ -64,7 +76,7 @@ class Browser:
         # draw is included in Browser since it needs access to the canvas
         for x, y, c in self.display_list:
             # skip drawing characters that are off screen (continue)
-            if y > self.scroll + HEIGHT: continue
+            if y > self.scroll + self.height: continue
             # skip characters below viewport
             if y + VSTEP < self.scroll: continue
             # y + VSTEP: bottom edge of the character
@@ -73,8 +85,8 @@ class Browser:
 
     def load(self, url):
         body = url.request()
-        text = lex(body, url.view_source)
-        self.display_list = layout(text)
+        self.text = lex(body, url.view_source)
+        self.display_list = layout(self.text,  self.width)
         self.draw()
 class URL:
     def __init__(self, url):
@@ -201,7 +213,6 @@ def lex(body, view_source):
                 elif c == ">":
                     in_tag = False
                 elif not in_tag:
-                    # print(c, end="")
                     body_result += c
             
             # special characters (< and > literals)
@@ -213,7 +224,7 @@ def lex(body, view_source):
         else:
             return body_result
 
-def layout(text):
+def layout(text, width):
     # instead of calling create_text on each char,
     # add to list with its position
         display_list = []
@@ -222,7 +233,7 @@ def layout(text):
             display_list.append((cursor_x, cursor_y, c))
             cursor_x += HSTEP
             # shift right after each character
-            if cursor_x >= WIDTH - HSTEP:
+            if cursor_x >= width - HSTEP:
                 # if x position is >= the screen width minus a step,
                 # reset x position and increment y position to
                 # go to a new line
