@@ -102,7 +102,6 @@ class URL:
             # render blank page
             self.scheme = "about"
             self.host = "blank"
-            self.data = ""
             return
         
         # check the scheme
@@ -118,7 +117,13 @@ class URL:
                 self.view_source = True
                 url = url.removeprefix("view-source:")
 
-            self.scheme, url = url.split("://", 1)
+            try:
+                self.scheme, url = url.split("://", 1)
+            except:
+                self.scheme = "about"
+                self.host = "blank"
+                return
+            
             assert self.scheme in ["http", "https", "file", "view-source"]
     
             self.host, url = url.split("/", 1)
