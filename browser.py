@@ -1,6 +1,7 @@
 import socket
 import ssl
 import tkinter
+import tkinter.font
 
 # to-dos:
 # - http compression
@@ -17,6 +18,16 @@ HSTEP, VSTEP = 13, 18
 SCROLL_STEP = 100
 LINEBREAK = VSTEP * 3
 # how much to scroll
+
+# characters outside a tag
+# lex avoids empty Text objects
+class Text:
+    def __init__(self, text):
+        self.text = text
+# contents of a tag
+class Tag:
+    def __init__(self, tag):
+        self.tag = tag
 
 class Browser:
     def __init__(self):
@@ -51,7 +62,7 @@ class Browser:
         self.width = e.width
         self.height = e.height
         # have to update the display list before re-drawing
-        self.display_list = layout(self.text, width=self.width)
+        self.display_list = Layout(self.tokens,  self.width).display_list
         self.draw()
         
     
@@ -78,7 +89,7 @@ class Browser:
         self.canvas.delete("all")
         # loop through the display list and draw each character
         # draw is included in Browser since it needs access to the canvas
-        for x, y, c in self.display_list:
+        for x, y, c, font in self.display_list:
             # skip drawing characters that are off screen (continue)
             if y > self.scroll + self.height: continue
             # skip characters below viewport
@@ -92,12 +103,12 @@ class Browser:
                 self.scroll = self.display_list[-1][1] - self.height
                 
             # when self.scroll changes value, the page scrolls
-            self.canvas.create_text(x, y - self.scroll, text=c)
+            self.canvas.create_text(x, y - self.scroll, text=c, font=font)
 
     def load(self, url):
         body = url.request()
-        self.text = lex(body, url.view_source)
-        self.display_list = layout(self.text,  self.width)
+        self.tokens = lex(body, url.view_source)
+        self.display_list = Layout(self.tokens,  self.width).display_list
         self.draw()
 class URL:
     def __init__(self, url):
@@ -228,51 +239,96 @@ class URL:
         return content
 
 def lex(body, view_source):
-        in_tag = False
-        body_result = ""
-        # iterate through request body, character by character
-        # in_tag = currently between pair of brackets
-        # not in_tag = current char is an angle bracket
-        # normal characters not in a tag are printed
+    out = []
+    # stores either text or tag contents before they can be used
+    buffer = ""
+    in_tag = False
+    # iterate through request body, character by character
+    # in_tag = currently between pair of brackets
+    # not in_tag = current char is an angle bracket
+    # normal characters not in a tag are printed
+    
+    if view_source == False:
+        for c in body:
+            if c == "<":
+                in_tag = True
+                if buffer: out.append(Text(buffer))
+                buffer = ""
+            elif c == ">":
+                in_tag = False
+                out.append(Tag(buffer))
+                buffer = ""
+            else:
+                # special characters (< and > literals)
+                if c == "&lt;":
+                    buffer += "<"
+                elif c == "&gt;":
+                    buffer += ">"
+                else:
+                    buffer += c
+            # check if buffered text
+        if not in_tag and buffer:
+            out.append(Text(buffer))
+        return out
         
-        if view_source == False:
-            for c in body:
-                if c == "<":
-                    in_tag = True
-                elif c == ">":
-                    in_tag = False
-                elif not in_tag:
-                    body_result += c
-            
-            # special characters (< and > literals)
-            body_result = body_result.replace("&lt;", "<")
-            body_result = body_result.replace("&gt;", ">")
-            return body_result
-            
-        # if view_source is True print source code
-        else:
-            return body_result
+    # if view_source is True print source code
+    else:
+        return body
+    
+class Layout:
+    def __init__(self, tokens, width):
+        self.display_list = []
+        self.cursor_x = HSTEP
+        self.cursor_y = VSTEP
+        self.weight = "normal"
+        self.style = "roman"
+        self.width = width
+        
+        for tok in tokens:
+            self.token(tok)
+    
+    def word(self, word):
+        # initialize font
+        font = tkinter.font.Font(
+            size=16,
+            weight=self.weight,
+            slant=self.style,
+        )
+        w = font.measure(word)
+        self.display_list.append((self.cursor_x, self.cursor_y, word, font))
+        # incremeent x position by width of word + space
+        # this is necessary since split removes whitespace
+        self.cursor_x += w + font.measure(" ")
+        self.cursor_x += HSTEP
+        # shift right after each character
+        if self.cursor_x + w > self.width - HSTEP:
+            # multiply linespace by 1.25 to add space between lines
+            self.cursor_y += font.metrics("linespace") * 1.25
+            # if x position is >= the screen width minus a step,
+            # reset x position and increment y position to
+            # go to a new line
+            if (word == "\n"):
+                #
+                self.cursor_y += LINEBREAK
+            else:    
+                self.cursor_y += VSTEP
+            self.cursor_x = HSTEP
+        
+    def token(self, tok):
+        if isinstance(tok, Text):
+            for word in tok.text.split():
+                self.word(word)
+        # support for weights and styles
+        # this supports nested tags as well
+        elif tok.tag == "i":
+            self.style = "italic"
+        elif tok.tag == "/i":
+            self.style = "roman"
+        elif tok.tag == "b":
+            self.weight = "bold"
+        elif tok.tag == "/b":
+            self.weight = "normal"
 
-def layout(text, width):
-    # instead of calling create_text on each char,
-    # add to list with its position
-        display_list = []
-        cursor_x, cursor_y = HSTEP, VSTEP
-        for c in text:
-            display_list.append((cursor_x, cursor_y, c))
-            cursor_x += HSTEP
-            # shift right after each character
-            if cursor_x >= width - HSTEP:
-                # if x position is >= the screen width minus a step,
-                # reset x position and increment y position to
-                # go to a new line
-                if (c == "\n"):
-                    #
-                    cursor_y += LINEBREAK
-                else:    
-                    cursor_y += VSTEP
-                cursor_x = HSTEP
-        return display_list
 
 if __name__ == "__main__":
     import sys
