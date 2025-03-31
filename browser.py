@@ -222,6 +222,10 @@ class HTMLParser:
         "area", "base", "br", "col", "embed", "hr", "img", "input",
         "link", "meta", "param", "source", "track", "wbr",
         ]
+        self.HEAD_TAGS = [
+        "base", "basefont", "bgsound", "noscript",
+        "link", "meta", "title", "style", "script",
+        ]
     
     # get tag name and attribute-value pairs
     # ignore values that contain white-space
@@ -249,6 +253,7 @@ class HTMLParser:
     def add_text(self, text):
         # ignore whitespace-only text nodes for now
         if text.isspace(): return
+        self.implicit_tags(None)
         parent = self.unfinished[-1]
         node = Text(text, parent)
         parent.children.append(node)
@@ -258,6 +263,7 @@ class HTMLParser:
         tag, attributes = self.get_attributes(tag)
         # if <!doctype> ignore for now
         if tag.startswith("!"): return
+        self.implicit_tags(tag)
         if tag.startswith("/"):
             if len(self.unfinished) == 1: return
             # if last tag, nothing to close
@@ -278,9 +284,33 @@ class HTMLParser:
             node = Element(tag=tag, parent=parent, attributes=attributes)
             self.unfinished.append(node)
             
-    
+    # compare tag or None (for text nodes) to list of unfinished tags
+    # to determine what's been omitted
+    def implicit_tags(self, tag):
+        while True:
+            open_tags = [node.tag for node in self.unfinished]
+            # if first tag is other than HTML, add it
+            if open_tags == [] and tag != "html":
+                self.add_tag("html")
+            # check if body or head tag is being omitted
+            elif open_tags == ["html"] \
+                and tag not in ["head", "body", "/html"]:
+                if tag in self.HEAD_TAGS:
+                    self.add_tag("head")
+                else:
+                    self.add_tag("body")
+            # closing head tag can also be implicit if parser
+            # is inside head tag and sees a body element
+            elif open_tags == ["html", "head"] and \
+                tag not in ["/head"] + self.HEAD_TAGS:
+                self.add_tag("/head")
+            # finish function already closes other tags, so exit loop
+            else:
+                break
     def finish(self):
         while len(self.unfinished) > 1:
+            if not self.unfinished:
+                self.implicit_tags(None)
             # turns incomplete tree into complete tree
             # by finishing any unfinished nodes
             node = self.unfinished.pop()
