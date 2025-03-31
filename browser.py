@@ -11,13 +11,14 @@ import tkinter.font
 # - scrollbar
 # - alternate text direction
 # - macOS touchpad scrolling
+# - be more specific with parameters
 
 WIDTH, HEIGHT = 800, 600
 HSTEP, VSTEP = 13, 18
 # HSTEP: space between characters, VSTEP: space between lines
 SCROLL_STEP = 100
-LINEBREAK = VSTEP * 3
 # how much to scroll
+LINEBREAK = VSTEP * 3
 
 class URL:
     def __init__(self, url):
@@ -200,8 +201,9 @@ class Text:
 
 # represents (tag) element node
 class Element:
-    def __init__(self, tag, parent):
+    def __init__(self, tag, attributes, parent):
         self.tag = tag
+        self.attributes = attributes
         self.children = []
         self.parent = parent
     
@@ -209,19 +211,53 @@ class Element:
         return "<" + self.tag + ">"
 
 # stores source code and incomplete tree
+# creates Element/Text objects and adds them to unfinished tree
 class HTMLParser:
     def __init__(self, body):
+        
         self.body = body
         self.unfinished = []
-        # creates Element/Text objects and adds them to unfinished tree
-
+        # self-closing tags (void tags)
+        self.SELF_CLOSING_TAGS = [
+        "area", "base", "br", "col", "embed", "hr", "img", "input",
+        "link", "meta", "param", "source", "track", "wbr",
+        ]
+    
+    # get tag name and attribute-value pairs
+    # ignore values that contain white-space
+    def get_attributes(self, text):
+        parts = text.split()
+        tag = parts[0].casefold()
+        attributes = {}
+        # html tags and attibutes are case-sensitive
+        # split each pair into name and value
+        for attrpair in parts[1:]:
+            if "=" in attrpair:
+                key, value = attrpair.split("=", 1)
+                attributes[key.casefold()] = value
+                # if value is quoted, strip quotes
+                if len(value) > 2 and value[0] in ["'", "\""]:
+                    value = value[1:-1]
+            
+            else:
+                # cases were the value is omitted
+                # attribute defaults to empty string
+                # example: <input disabled>
+                attributes[attrpair.casefold()] = ""
+        return tag, attributes
     # add text node to tree by adding as child of last unfinished node
     def add_text(self, text):
+        # ignore whitespace-only text nodes for now
+        if text.isspace(): return
         parent = self.unfinished[-1]
         node = Text(text, parent)
         parent.children.append(node)
     
     def add_tag(self, tag):
+        # get attributes necessary to construct element
+        tag, attributes = self.get_attributes(tag)
+        # if <!doctype> ignore for now
+        if tag.startswith("!"): return
         if tag.startswith("/"):
             if len(self.unfinished) == 1: return
             # if last tag, nothing to close
@@ -230,12 +266,18 @@ class HTMLParser:
             node = self.unfinished.pop()
             parent = self.unfinished[-1]
             parent.children.append(node)
+        # auto close self-closing tags
+        elif tag in self.SELF_CLOSING_TAGS:
+            parent = self.unfinished[-1]
+            node = Element(tag=tag, parent=parent, attributes=attributes)
+            parent.children.append(node)
         else:
             # if first open tag, add unfinished node end of list
             parent = self.unfinished[-1] if self.unfinished else None
             # first open tag has no parent
-            node = Element(tag, parent)
+            node = Element(tag=tag, parent=parent, attributes=attributes)
             self.unfinished.append(node)
+            
     
     def finish(self):
         while len(self.unfinished) > 1:
@@ -276,10 +318,45 @@ class Layout:
         self.size = 12
 
         self.line = []
-        for tok in tokens:
-            self.token(tok)
+        self.recurse(tokens)
         self.flush()
-
+    
+    def open_tag(self, tag):
+        if tag == "i":
+            self.style= "italic"
+        elif tag == "b":
+            self.weight = "bold"
+        elif tag == "small":
+            self.size -= 2
+        elif tag == "big":
+            self.size += 2
+        elif tag == "br":
+            self.flush()
+            
+        
+    def close_tag(self, tag):
+        if tag == "/i":
+            self.style = "roman"
+        elif tag == "/b":
+            self.weight = "normal"
+        elif tag == "/small":
+            self.size += 2
+        elif tag == "/big":
+            self.size -= 2
+        elif tag == "/p":
+            self.flush()
+            self.cursor_y += VSTEP
+    
+    def recurse(self, tree):
+        if isinstance(tree, Text):
+            for word in tree.text.split():
+                self.word(word)
+        else:
+            self.open_tag(tree.tag)
+            for child in tree.children:
+                self.recurse(child)
+            self.close_tag(tree.tag)
+        
     def token(self, tok):
         if isinstance(tok, Text):
             for word in tok.text.split():
@@ -397,9 +474,8 @@ class Browser:
 
     def load(self, url):
         body = URL(sys.argv[1]).request()
-        nodes = HTMLParser(body).parse()
-        print_tree(nodes)
-        self.display_list = Layout(tokens).display_list
+        self.nodes = HTMLParser(body).parse()
+        self.display_list = Layout(self.nodes).display_list
         self.draw()
 
 if __name__ == "__main__":
