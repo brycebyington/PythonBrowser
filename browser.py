@@ -19,96 +19,6 @@ SCROLL_STEP = 100
 LINEBREAK = VSTEP * 3
 # how much to scroll
 
-# characters outside a tag
-# lex avoids empty Text objects
-class Text:
-    def __init__(self, text):
-        self.text = text
-# contents of a tag
-class Tag:
-    def __init__(self, tag):
-        self.tag = tag
-
-class Browser:
-    def __init__(self):
-        # create the window
-        self.window = tkinter.Tk()
-        #self.width = WIDTH
-        #self.height = HEIGHT
-        # create the canvas inside the window
-        # window is passed as an argument to inform
-        # tk of where to display the canvas
-        self.canvas = tkinter.Canvas(
-            self.window,
-            width=WIDTH,
-            height=HEIGHT
-        )
-        # position the canvas inside the window
-        # fill="both": fill entire space with widget
-        # expand=1: expand to fill any space not otherwise used
-        self.canvas.pack()
-        #self.canvas.bind("<Configure>", self.resize)
-        # distance scrolled
-        self.scroll = 0
-        self.display_list = []
-        # bind scroll function to down key
-        # self.scrolldown is an event handler
-        self.window.bind("<Down>", self.scrolldown)
-        self.window.bind("<Up>", self.scrollup)
-        self.window.bind("<MouseWheel>", self.mousescroll)
-    
-    #def resize(self, e):
-        # event contains window information
-        # and updates when the window is resized
-        #self.width = e.width
-        #self.height = e.height
-        # have to update the display list before re-drawing
-        #self.display_list = Layout(self.tokens).display_list
-        #self.draw()
-        
-    
-    def scrolldown(self, e):
-        # e is an event argument, which is ignored here because
-        # key presses only require information about
-        # whether or not the key is pressed
-        self.scroll += SCROLL_STEP
-        self.draw()
-    
-    def scrollup(self, e):
-        # negative number to scroll up because vertical coordinates are backwards
-        self.scroll -= SCROLL_STEP
-        self.draw()
-    
-    def mousescroll(self, e):
-        # e.delta: how far and in what direction to scroll
-        self.scroll -= e.delta
-        self.draw()
-    
-
-    def draw(self):
-        # erase old text before drawing new text when scrolling down
-        self.canvas.delete("all")
-        # loop through the display list and draw each character
-        # draw is included in Browser since it needs access to the canvas
-        for x, y, word, font in self.display_list:
-            # skip drawing characters that are off screen (continue)
-            if y > self.scroll + HEIGHT: continue
-            # skip characters below viewport
-            if y + font.metrics("linespace") < self.scroll: continue
-            # if x, y are the last elements in the display_list, prevent further scrolling
-            # check if current cursor position is equal to the last element in display_list
-            # if it is, set self.scroll to the y value of the last element in display_list - height
-            #if (x, y) == (self.display_list[-1][0], self.display_list[-1][1]):
-            #   self.scroll = self.display_list[-1][1] - HEIGHT
-                
-            # when self.scroll changes value, the page scrolls
-            self.canvas.create_text(x, y - self.scroll, text=word, font=font, anchor="nw")
-
-    def load(self, url):
-        body = url.request()
-        tokens = lex(body)
-        self.display_list = Layout(tokens).display_list
-        self.draw()
 class URL:
     def __init__(self, url):
 
@@ -269,6 +179,91 @@ def get_font(size, weight, style):
         FONTS[key] = (font, label)
     return FONTS[key][0]
 
+# print html tree
+def print_tree(node, indent=0):
+        print(" " * indent, node)
+        for child in node.children:
+            print_tree(child, indent + 2)
+
+
+# represents text node
+class Text:
+    def __init__(self, text, parent):
+        self.text = text
+        # text nodes technically never have children
+        self.children = []
+        self.parent = parent
+    
+    # prints relevant information
+    def __repr__(self):
+        return repr(self.text)
+
+# represents (tag) element node
+class Element:
+    def __init__(self, tag, parent):
+        self.tag = tag
+        self.children = []
+        self.parent = parent
+    
+    def __repr__(self):
+        return "<" + self.tag + ">"
+
+# stores source code and incomplete tree
+class HTMLParser:
+    def __init__(self, body):
+        self.body = body
+        self.unfinished = []
+        # creates Element/Text objects and adds them to unfinished tree
+
+    # add text node to tree by adding as child of last unfinished node
+    def add_text(self, text):
+        parent = self.unfinished[-1]
+        node = Text(text, parent)
+        parent.children.append(node)
+    
+    def add_tag(self, tag):
+        if tag.startswith("/"):
+            if len(self.unfinished) == 1: return
+            # if last tag, nothing to close
+            # close tag, finish last unfinished node
+            # by adding it to previous unfinished node in list
+            node = self.unfinished.pop()
+            parent = self.unfinished[-1]
+            parent.children.append(node)
+        else:
+            # if first open tag, add unfinished node end of list
+            parent = self.unfinished[-1] if self.unfinished else None
+            # first open tag has no parent
+            node = Element(tag, parent)
+            self.unfinished.append(node)
+    
+    def finish(self):
+        while len(self.unfinished) > 1:
+            # turns incomplete tree into complete tree
+            # by finishing any unfinished nodes
+            node = self.unfinished.pop()
+            parent = self.unfinished[-1]
+            parent.children.append(node)
+        return self.unfinished.pop()
+
+    def parse(self):
+        text = ""
+        in_tag = False
+        for c in self.body:
+            if c == "<":
+                in_tag = True
+                if text: self.add_text(text)
+                text = ""
+            elif c == ">":
+                in_tag = False
+                self.add_tag(text)
+                text = ""
+            else:
+                text += c
+        if not in_tag and text:
+            self.add_text(text)
+        return self.finish()
+    
 class Layout:
     def __init__(self, tokens):
         self.tokens = tokens
@@ -343,7 +338,69 @@ class Layout:
         self.cursor_x = HSTEP
         self.line = []
 
+class Browser:
+    def __init__(self):
+        # create the window
+        self.window = tkinter.Tk()
+        #self.width = WIDTH
+        #self.height = HEIGHT
+        # create the canvas inside the window
+        # window is passed as an argument to inform
+        # tk of where to display the canvas
+        self.canvas = tkinter.Canvas(
+            self.window,
+            width=WIDTH,
+            height=HEIGHT
+        )
+        # position the canvas inside the window
+        self.canvas.pack()
+        # distance scrolled
+        self.scroll = 0
+        self.display_list = []
+        # bind scroll function to down key
+        # self.scrolldown is an event handler
+        self.window.bind("<Down>", self.scrolldown)
+        self.window.bind("<Up>", self.scrollup)
+        self.window.bind("<MouseWheel>", self.mousescroll)
+        
+    def scrolldown(self, e):
+        # e is an event argument, which is ignored here because
+        # key presses only require information about
+        # whether or not the key is pressed
+        self.scroll += SCROLL_STEP
+        self.draw()
+    
+    def scrollup(self, e):
+        # negative number to scroll up because vertical coordinates are backwards
+        self.scroll -= SCROLL_STEP
+        self.draw()
+    
+    def mousescroll(self, e):
+        # e.delta: how far and in what direction to scroll
+        self.scroll -= e.delta
+        self.draw()
+    
 
+    def draw(self):
+        # erase old text before drawing new text when scrolling down
+        self.canvas.delete("all")
+        # loop through the display list and draw each character
+        # draw is included in Browser since it needs access to the canvas
+        for x, y, word, font in self.display_list:
+            # skip drawing characters that are off screen (continue)
+            if y > self.scroll + HEIGHT: continue
+            # skip characters below viewport
+            if y + font.metrics("linespace") < self.scroll: continue
+                
+            # when self.scroll changes value, the page scrolls
+            self.canvas.create_text(x, y - self.scroll, text=word, font=font, anchor="nw")
+
+    def load(self, url):
+        body = URL(sys.argv[1]).request()
+        nodes = HTMLParser(body).parse()
+        print_tree(nodes)
+        self.display_list = Layout(tokens).display_list
+        self.draw()
 
 if __name__ == "__main__":
     import sys
