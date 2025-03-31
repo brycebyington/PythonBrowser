@@ -33,8 +33,8 @@ class Browser:
     def __init__(self):
         # create the window
         self.window = tkinter.Tk()
-        self.width = WIDTH
-        self.height = HEIGHT
+        #self.width = WIDTH
+        #self.height = HEIGHT
         # create the canvas inside the window
         # window is passed as an argument to inform
         # tk of where to display the canvas
@@ -47,23 +47,24 @@ class Browser:
         # fill="both": fill entire space with widget
         # expand=1: expand to fill any space not otherwise used
         self.canvas.pack(fill="both", expand=1)
-        self.canvas.bind("<Configure>", self.resize)
+        #self.canvas.bind("<Configure>", self.resize)
         # distance scrolled
         self.scroll = 0
+        self.display_list = []
         # bind scroll function to down key
         # self.scrolldown is an event handler
         self.window.bind("<Down>", self.scrolldown)
         self.window.bind("<Up>", self.scrollup)
         self.window.bind("<MouseWheel>", self.mousescroll)
     
-    def resize(self, e):
+    #def resize(self, e):
         # event contains window information
         # and updates when the window is resized
-        self.width = e.width
-        self.height = e.height
+        #self.width = e.width
+        #self.height = e.height
         # have to update the display list before re-drawing
-        self.display_list = Layout(self.tokens,  self.width).display_list
-        self.draw()
+        #self.display_list = Layout(self.tokens).display_list
+        #self.draw()
         
     
     def scrolldown(self, e):
@@ -91,24 +92,22 @@ class Browser:
         # draw is included in Browser since it needs access to the canvas
         for x, y, c, font in self.display_list:
             # skip drawing characters that are off screen (continue)
-            if y > self.scroll + self.height: continue
+            if y > self.scroll + HEIGHT: continue
             # skip characters below viewport
-            if y + VSTEP < self.scroll: continue
-            # y + VSTEP: bottom edge of the character
-
+            if y + font.metrics("linespace") < self.scroll: continue
             # if x, y are the last elements in the display_list, prevent further scrolling
             # check if current cursor position is equal to the last element in display_list
             # if it is, set self.scroll to the y value of the last element in display_list - height
-            if (x, y) == (self.display_list[-1][0], self.display_list[-1][1]):
-                self.scroll = self.display_list[-1][1] - self.height
+            #if (x, y) == (self.display_list[-1][0], self.display_list[-1][1]):
+            #   self.scroll = self.display_list[-1][1] - HEIGHT
                 
             # when self.scroll changes value, the page scrolls
-            self.canvas.create_text(x, y - self.scroll, text=c, font=font)
+            self.canvas.create_text(x, y - self.scroll, text=c, font=font, anchor="nw")
 
     def load(self, url):
         body = url.request()
         self.tokens = lex(body, url.view_source)
-        self.display_list = Layout(self.tokens,  self.width).display_list
+        self.display_list = Layout(self.tokens).display_list
         self.draw()
 class URL:
     def __init__(self, url):
@@ -274,52 +273,41 @@ def lex(body, view_source):
     # if view_source is True print source code
     else:
         return body
-    
+
+# cache to re-use font objects when possible
+# instead of creating new ones
+FONTS = {}
+# keys: (size, weight, style)
+# values: (font object)
+def get_font(size, weight, style):
+    key = (size, weight, style)
+    if key not in FONTS:
+        font = tkinter.font.Font(size=size, weight=weight,
+            slant=style)
+        label = tkinter.Label(font=font)
+        FONTS[key] = (font, label)
+    return FONTS[key][0]
+
 class Layout:
-    def __init__(self, tokens, width):
+    def __init__(self, tokens):
+        self.tokens = tokens
         self.display_list = []
+
         self.cursor_x = HSTEP
         self.cursor_y = VSTEP
         self.weight = "normal"
         self.style = "roman"
-        self.width = width
-        
+        self.size = 12
+
+        self.line = []
         for tok in tokens:
             self.token(tok)
-    
-    def word(self, word):
-        # initialize font
-        font = tkinter.font.Font(
-            size=16,
-            weight=self.weight,
-            slant=self.style,
-        )
-        w = font.measure(word)
-        self.display_list.append((self.cursor_x, self.cursor_y, word, font))
-        # incremeent x position by width of word + space
-        # this is necessary since split removes whitespace
-        self.cursor_x += w + font.measure(" ")
-        self.cursor_x += HSTEP
-        # shift right after each character
-        if self.cursor_x + w > self.width - HSTEP:
-            # multiply linespace by 1.25 to add space between lines
-            self.cursor_y += font.metrics("linespace") * 1.25
-            # if x position is >= the screen width minus a step,
-            # reset x position and increment y position to
-            # go to a new line
-            if (word == "\n"):
-                #
-                self.cursor_y += LINEBREAK
-            else:    
-                self.cursor_y += VSTEP
-            self.cursor_x = HSTEP
-        
+        self.flush()
+
     def token(self, tok):
         if isinstance(tok, Text):
             for word in tok.text.split():
                 self.word(word)
-        # support for weights and styles
-        # this supports nested tags as well
         elif tok.tag == "i":
             self.style = "italic"
         elif tok.tag == "/i":
@@ -328,6 +316,54 @@ class Layout:
             self.weight = "bold"
         elif tok.tag == "/b":
             self.weight = "normal"
+        elif tok.tag == "small":
+            self.size -= 2
+        elif tok.tag == "/small":
+            self.size += 2
+        elif tok.tag == "big":
+            self.size += 4
+        elif tok.tag == "/big":
+            self.size -= 4
+        elif tok.tag == "br":
+            # ends current line
+            self.flush()
+        elif tok.tag == "/p":
+            # ends current line + gap
+            self.flush()
+            self.cursor_y += VSTEP
+        
+    def word(self, word):
+        font = get_font(self.size, self.weight, self.style)
+        w = font.measure(word)
+        if self.cursor_x + w > WIDTH - HSTEP:
+            self.flush()
+        self.line.append((self.cursor_x, word, font))
+        self.cursor_x += w + font.measure(" ")
+
+    # flush does three things:
+    # align the words along the baseline
+    # add the words to the display list
+    # update cursor x and y positions
+    def flush(self):
+        if not self.line: return
+        # compute where "on the line" is for each word
+        metrics = [font.metrics() for x, word, font in self.line]
+        max_ascent = max([metric["ascent"] for metric in metrics])
+        # + 1.25 accounts for leading
+        baseline = self.cursor_y + 1.25 * max_ascent
+        for x, word, font in self.line:
+            # y starts at baseline and moves up 
+            # by just enough to accomodate word's ascent
+            y = baseline - font.metrics("ascent")
+            self.display_list.append((x, y, word, font))
+        max_descent = max([metric["descent"] for metric in metrics])
+        # cursor y position moves far enough down below baseline
+        # to account for the deepest descender
+        self.cursor_y = baseline + 1.25 * max_descent
+        # update cursor x position and line fields
+        self.cursor_x = HSTEP
+        self.line = []
+
 
 
 if __name__ == "__main__":
