@@ -46,7 +46,7 @@ class Browser:
         # position the canvas inside the window
         # fill="both": fill entire space with widget
         # expand=1: expand to fill any space not otherwise used
-        self.canvas.pack(fill="both", expand=1)
+        self.canvas.pack()
         #self.canvas.bind("<Configure>", self.resize)
         # distance scrolled
         self.scroll = 0
@@ -90,7 +90,7 @@ class Browser:
         self.canvas.delete("all")
         # loop through the display list and draw each character
         # draw is included in Browser since it needs access to the canvas
-        for x, y, c, font in self.display_list:
+        for x, y, word, font in self.display_list:
             # skip drawing characters that are off screen (continue)
             if y > self.scroll + HEIGHT: continue
             # skip characters below viewport
@@ -102,17 +102,15 @@ class Browser:
             #   self.scroll = self.display_list[-1][1] - HEIGHT
                 
             # when self.scroll changes value, the page scrolls
-            self.canvas.create_text(x, y - self.scroll, text=c, font=font, anchor="nw")
+            self.canvas.create_text(x, y - self.scroll, text=word, font=font, anchor="nw")
 
     def load(self, url):
         body = url.request()
-        self.tokens = lex(body, url.view_source)
-        self.display_list = Layout(self.tokens).display_list
+        tokens = lex(body)
+        self.display_list = Layout(tokens).display_list
         self.draw()
 class URL:
     def __init__(self, url):
-        # default view_source to false
-        self.view_source = False
 
         # __init__ is Python's syntax for class constructors
         # "self" is Python's analog for "this" in C++, which
@@ -131,12 +129,6 @@ class URL:
             self.scheme = "data"
             self.data = url.removeprefix("data:text/html,")
         else: 
-
-            if url.startswith("view-source:"):
-                self.scheme = "view-source"
-                self.view_source = True
-                url = url.removeprefix("view-source:")
-
             try:
                 self.scheme, url = url.split("://", 1)
             except:
@@ -237,7 +229,7 @@ class URL:
         s.close()
         return content
 
-def lex(body, view_source):
+def lex(body):
     out = []
     # stores either text or tag contents before they can be used
     buffer = ""
@@ -247,32 +239,21 @@ def lex(body, view_source):
     # not in_tag = current char is an angle bracket
     # normal characters not in a tag are printed
     
-    if view_source == False:
-        for c in body:
-            if c == "<":
-                in_tag = True
-                if buffer: out.append(Text(buffer))
-                buffer = ""
-            elif c == ">":
-                in_tag = False
-                out.append(Tag(buffer))
-                buffer = ""
-            else:
-                # special characters (< and > literals)
-                if c == "&lt;":
-                    buffer += "<"
-                elif c == "&gt;":
-                    buffer += ">"
-                else:
-                    buffer += c
-            # check if buffered text
-        if not in_tag and buffer:
-            out.append(Text(buffer))
-        return out
-        
-    # if view_source is True print source code
-    else:
-        return body
+    for c in body:
+        if c == "<":
+            in_tag = True
+            if buffer: out.append(Text(buffer))
+            buffer = ""
+        elif c == ">":
+            in_tag = False
+            out.append(Tag(buffer))
+            buffer = ""
+        else:
+            buffer += c
+     # check if buffered text
+    if not in_tag and buffer:
+        out.append(Text(buffer))
+    return out
 
 # cache to re-use font objects when possible
 # instead of creating new ones
@@ -325,10 +306,8 @@ class Layout:
         elif tok.tag == "/big":
             self.size -= 4
         elif tok.tag == "br":
-            # ends current line
             self.flush()
         elif tok.tag == "/p":
-            # ends current line + gap
             self.flush()
             self.cursor_y += VSTEP
         
