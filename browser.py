@@ -48,14 +48,14 @@ class URL:
                 return
             
             assert self.scheme in ["http", "https", "file", "view-source"]
-    
+            
             self.host, url = url.split("/", 1)
             if self.scheme == "file":
                 self.path = url
             else:
                 self.path = '/' + url
             # split(s, n) splits a string at th e first n copies of s
-            
+            print(self.path)
             if self.scheme == "http":
                 self.port = 80
             elif self.scheme == "https":
@@ -157,7 +157,7 @@ def lex(body):
             buffer = ""
         elif c == ">":
             in_tag = False
-            out.append(Tag(buffer))
+            out.append(Element(buffer))
             buffer = ""
         else:
             buffer += c
@@ -238,11 +238,11 @@ class HTMLParser:
         for attrpair in parts[1:]:
             if "=" in attrpair:
                 key, value = attrpair.split("=", 1)
-                attributes[key.casefold()] = value
+                
                 # if value is quoted, strip quotes
                 if len(value) > 2 and value[0] in ["'", "\""]:
                     value = value[1:-1]
-            
+                attributes[key.casefold()] = value
             else:
                 # cases were the value is omitted
                 # attribute defaults to empty string
@@ -365,15 +365,15 @@ class Layout:
             
         
     def close_tag(self, tag):
-        if tag == "/i":
+        if tag == "i":
             self.style = "roman"
-        elif tag == "/b":
+        elif tag == "b":
             self.weight = "normal"
-        elif tag == "/small":
+        elif tag == "small":
             self.size += 2
-        elif tag == "/big":
+        elif tag == "big":
             self.size -= 2
-        elif tag == "/p":
+        elif tag == "p":
             self.flush()
             self.cursor_y += VSTEP
     
@@ -479,6 +479,7 @@ class Browser:
     def load(self, url):
         body = URL(sys.argv[1]).request()
         self.nodes = HTMLParser(body).parse()
+        print_tree(self.nodes)
         self.display_list = Layout(self.nodes).display_list
         self.draw()
 
